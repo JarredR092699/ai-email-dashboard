@@ -92,6 +92,9 @@ app.get('/auth/callback', async (req, res) => {
         const code = '${code}';
         const error = '${error}';
         
+        // Determine the correct origin dynamically
+        const targetOrigin = window.opener ? window.opener.location.origin : window.location.origin;
+        
         if (code) {
           // Send code to backend
           fetch('/api/auth/callback', {
@@ -103,12 +106,12 @@ app.get('/auth/callback', async (req, res) => {
           .then(response => response.json())
           .then(data => {
             if (data.success) {
-              window.opener.postMessage({ type: 'GMAIL_AUTH_SUCCESS' }, 'http://localhost:5173');
+              window.opener.postMessage({ type: 'GMAIL_AUTH_SUCCESS' }, targetOrigin);
             } else {
               window.opener.postMessage({ 
                 type: 'GMAIL_AUTH_ERROR', 
                 error: data.error || 'Authentication failed' 
-              }, 'http://localhost:5173');
+              }, targetOrigin);
             }
             window.close();
           })
@@ -116,14 +119,14 @@ app.get('/auth/callback', async (req, res) => {
             window.opener.postMessage({ 
               type: 'GMAIL_AUTH_ERROR', 
               error: err.message 
-            }, 'http://localhost:5173');
+            }, targetOrigin);
             window.close();
           });
         } else if (error) {
           window.opener.postMessage({ 
             type: 'GMAIL_AUTH_ERROR', 
             error: error 
-          }, 'http://localhost:5173');
+          }, targetOrigin);
           window.close();
         }
       </script>
