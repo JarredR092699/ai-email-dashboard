@@ -2,6 +2,7 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const session = require('express-session');
+const MemoryStore = require('memorystore')(session);
 const { google } = require('googleapis');
 const aiService = require('./services/aiService');
 const path = require('path');
@@ -18,15 +19,18 @@ app.use(cors({
 
 app.use(express.json());
 
-// Configure session
+// Configure session with memory store
 app.use(session({
   secret: process.env.SESSION_SECRET || 'fallback-secret-key',
   resave: false,
-  saveUninitialized: true, // Changed to true for production debugging
+  saveUninitialized: false,
+  store: new MemoryStore({
+    checkPeriod: 86400000 // prune expired entries every 24h
+  }),
   cookie: {
     secure: isProduction, // Use secure cookies in production (HTTPS)
     maxAge: 24 * 60 * 60 * 1000, // 24 hours
-    httpOnly: false, // Changed to false so frontend can access it
+    httpOnly: false, // Allow frontend access
     sameSite: isProduction ? 'none' : 'lax'
   },
   name: 'email.dashboard.sid'
