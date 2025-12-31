@@ -24,9 +24,12 @@ app.use(session({
   resave: false,
   saveUninitialized: false,
   cookie: {
-    secure: false, // Set to true in production with HTTPS
-    maxAge: 24 * 60 * 60 * 1000 // 24 hours
-  }
+    secure: isProduction, // Use secure cookies in production (HTTPS)
+    maxAge: 24 * 60 * 60 * 1000, // 24 hours
+    httpOnly: true,
+    sameSite: isProduction ? 'none' : 'lax'
+  },
+  name: 'email.dashboard.sid'
 }));
 
 // Google OAuth configuration
@@ -319,7 +322,7 @@ if (isProduction) {
   app.use(express.static(path.join(__dirname, '../email-dashboard/dist')));
   
   // Handle React Router routes
-  app.get('*', (req, res) => {
+  app.get('/*', (req, res) => {
     // Don't serve index.html for API routes
     if (req.path.startsWith('/api/') || req.path.startsWith('/auth/')) {
       return res.status(404).json({ error: 'API route not found' });
