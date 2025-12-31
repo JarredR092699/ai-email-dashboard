@@ -332,8 +332,13 @@ app.use((error, req, res, next) => {
 
 // Catch-all handler for React Router (must be last!)
 if (isProduction) {
-  app.get('*', (req, res) => {
-    res.sendFile(path.join(__dirname, '../email-dashboard/dist/index.html'));
+  app.use((req, res, next) => {
+    // Only serve index.html for non-API requests that aren't found
+    if (!req.path.startsWith('/api/') && !req.path.startsWith('/auth/')) {
+      res.sendFile(path.join(__dirname, '../email-dashboard/dist/index.html'));
+    } else {
+      res.status(404).json({ error: 'API route not found' });
+    }
   });
 }
 
