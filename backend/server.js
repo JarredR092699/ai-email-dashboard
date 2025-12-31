@@ -316,19 +316,9 @@ app.get('/api/emails', async (req, res) => {
   }
 });
 
-// Serve frontend in production
+// Serve frontend static files in production
 if (isProduction) {
-  // Serve static files from frontend build
   app.use(express.static(path.join(__dirname, '../email-dashboard/dist')));
-  
-  // Handle React Router routes
-  app.get('/*', (req, res) => {
-    // Don't serve index.html for API routes
-    if (req.path.startsWith('/api/') || req.path.startsWith('/auth/')) {
-      return res.status(404).json({ error: 'API route not found' });
-    }
-    res.sendFile(path.join(__dirname, '../email-dashboard/dist/index.html'));
-  });
 }
 
 // Error handling middleware
@@ -339,6 +329,13 @@ app.use((error, req, res, next) => {
     message: error.message 
   });
 });
+
+// Catch-all handler for React Router (must be last!)
+if (isProduction) {
+  app.get('*', (req, res) => {
+    res.sendFile(path.join(__dirname, '../email-dashboard/dist/index.html'));
+  });
+}
 
 app.listen(PORT, () => {
   console.log(`🚀 Email Dashboard ${isProduction ? 'PRODUCTION' : 'DEV'} running on port ${PORT}`);
