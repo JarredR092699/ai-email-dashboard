@@ -211,9 +211,15 @@ app.post('/api/auth/callback', async (req, res) => {
 
 // Check authentication status
 app.get('/api/auth/status', (req, res) => {
+  const authToken = req.headers['authorization']?.replace('Bearer ', '') || req.session.authToken;
+  const hasTokenInStore = authToken ? tokenStore.has(authToken) : false;
+  
   const status = {
     isAuthenticated: !!req.session.isAuthenticated,
-    hasTokens: !!req.session.tokens 
+    hasTokens: !!req.session.tokens,
+    hasAuthToken: !!authToken,
+    hasTokenInStore: hasTokenInStore,
+    tokenStoreSize: tokenStore.size
   };
   console.log('📊 Auth status check:', status);
   res.json(status);
