@@ -11,6 +11,9 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 const isProduction = process.env.NODE_ENV === 'production';
 
+// Temporary in-memory token storage for Railway (since sessions aren't working)
+const tokenStore = new Map();
+
 // Configure CORS
 app.use(cors({
   origin: isProduction ? true : (process.env.FRONTEND_URL || 'http://localhost:5173'),
@@ -110,7 +113,14 @@ app.get('/auth/callback', async (req, res) => {
           .then(response => response.json())
           .then(data => {
             if (data.success) {
-              window.opener.postMessage({ type: 'GMAIL_AUTH_SUCCESS' }, targetOrigin);
+              // Store auth token in localStorage
+              if (data.authToken) {
+                window.opener.localStorage.setItem('emailDashboardAuthToken', data.authToken);
+              }
+              window.opener.postMessage({ 
+                type: 'GMAIL_AUTH_SUCCESS',
+                authToken: data.authToken
+              }, targetOrigin);
             } else {
               window.opener.postMessage({ 
                 type: 'GMAIL_AUTH_ERROR', 
@@ -165,28 +175,30 @@ app.post('/api/auth/callback', async (req, res) => {
   const { code } = req.body;
   
   console.log('📧 Received OAuth callback with code:', code ? 'YES' : 'NO');
-  console.log('📧 Session ID:', req.sessionID);
-  console.log('📧 Session before auth:', JSON.stringify(req.session));
   
   try {
     const { tokens } = await oauth2Client.getToken(code);
     oauth2Client.setCredentials(tokens);
     
-    // Store tokens in session
-    req.session.tokens = tokens;
-    req.session.isAuthenticated = true;
+    // Generate a temporary auth token
+    const authToken = `auth_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     
-    // Force session save
-    await new Promise((resolve, reject) => {
-      req.session.save((err) => {
-        if (err) reject(err);
-        else resolve();
-      });
+    // Store tokens with temporary auth token
+    tokenStore.set(authToken, {
+      tokens,
+      timestamp: Date.now()
     });
     
-    console.log('✅ OAuth successful, tokens stored in session');
-    console.log('✅ Session after auth:', JSON.stringify(req.session));
-    res.json({ success: true, message: 'Authentication successful' });
+    // Also try to store in session as backup
+    req.session.authToken = authToken;
+    req.session.isAuthenticated = true;
+    
+    console.log('✅ OAuth successful, tokens stored with auth token:', authToken);
+    res.json({ 
+      success: true, 
+      message: 'Authentication successful',
+      authToken: authToken
+    });
   } catch (error) {
     console.error('❌ OAuth callback error:', error);
     res.status(400).json({ 
@@ -219,19 +231,37 @@ app.post('/api/auth/signout', (req, res) => {
 
 // Fetch emails
 app.get('/api/emails', async (req, res) => {
-  console.log('📧 /api/emails request - Session ID:', req.sessionID);
-  console.log('📧 Session data:', JSON.stringify(req.session));
-  console.log('📧 Is authenticated:', !!req.session.isAuthenticated);
-  console.log('📧 Has tokens:', !!req.session.tokens);
+  console.log('📧 /api/emails request');
   
-  if (!req.session.isAuthenticated || !req.session.tokens) {
-    console.log('❌ Authentication failed - redirecting to auth');
+  // Try to get auth token from header or session
+  const authToken = req.headers['authorization']?.replace('Bearer ', '') || req.session.authToken;
+  console.log('📧 Auth token:', authToken ? 'YES' : 'NO');
+  
+  let tokens = null;
+  
+  if (authToken && tokenStore.has(authToken)) {
+    const tokenData = tokenStore.get(authToken);
+    // Check if token is not too old (1 hour)
+    if (Date.now() - tokenData.timestamp < 3600000) {
+      tokens = tokenData.tokens;
+      console.log('📧 Using tokens from token store');
+    } else {
+      tokenStore.delete(authToken);
+      console.log('📧 Token expired, removing from store');
+    }
+  } else if (req.session.tokens) {
+    tokens = req.session.tokens;
+    console.log('📧 Using tokens from session');
+  }
+  
+  if (!tokens) {
+    console.log('❌ Authentication failed - no valid tokens');
     return res.status(401).json({ error: 'Not authenticated' });
   }
   
   try {
     // Set credentials for this request
-    oauth2Client.setCredentials(req.session.tokens);
+    oauth2Client.setCredentials(tokens);
     
     const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
     const maxResults = parseInt(req.query.limit) || 50;

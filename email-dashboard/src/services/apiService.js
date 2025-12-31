@@ -5,9 +5,14 @@ const API_BASE_URL = import.meta.env.PROD
 class ApiService {
   async request(endpoint, options = {}) {
     const url = `${API_BASE_URL}${endpoint}`;
+    
+    // Get auth token from localStorage
+    const authToken = localStorage.getItem('emailDashboardAuthToken');
+    
     const config = {
       headers: {
         'Content-Type': 'application/json',
+        ...(authToken && { 'Authorization': `Bearer ${authToken}` }),
       },
       credentials: 'include', // Important for session cookies
       ...options,
