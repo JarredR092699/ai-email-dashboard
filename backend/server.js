@@ -22,11 +22,11 @@ app.use(express.json());
 app.use(session({
   secret: process.env.SESSION_SECRET || 'fallback-secret-key',
   resave: false,
-  saveUninitialized: false,
+  saveUninitialized: true, // Changed to true for production debugging
   cookie: {
     secure: isProduction, // Use secure cookies in production (HTTPS)
     maxAge: 24 * 60 * 60 * 1000, // 24 hours
-    httpOnly: true,
+    httpOnly: false, // Changed to false so frontend can access it
     sameSite: isProduction ? 'none' : 'lax'
   },
   name: 'email.dashboard.sid'
@@ -161,6 +161,8 @@ app.post('/api/auth/callback', async (req, res) => {
   const { code } = req.body;
   
   console.log('📧 Received OAuth callback with code:', code ? 'YES' : 'NO');
+  console.log('📧 Session ID:', req.sessionID);
+  console.log('📧 Session before auth:', JSON.stringify(req.session));
   
   try {
     const { tokens } = await oauth2Client.getToken(code);
@@ -170,7 +172,16 @@ app.post('/api/auth/callback', async (req, res) => {
     req.session.tokens = tokens;
     req.session.isAuthenticated = true;
     
+    // Force session save
+    await new Promise((resolve, reject) => {
+      req.session.save((err) => {
+        if (err) reject(err);
+        else resolve();
+      });
+    });
+    
     console.log('✅ OAuth successful, tokens stored in session');
+    console.log('✅ Session after auth:', JSON.stringify(req.session));
     res.json({ success: true, message: 'Authentication successful' });
   } catch (error) {
     console.error('❌ OAuth callback error:', error);
@@ -204,7 +215,13 @@ app.post('/api/auth/signout', (req, res) => {
 
 // Fetch emails
 app.get('/api/emails', async (req, res) => {
+  console.log('📧 /api/emails request - Session ID:', req.sessionID);
+  console.log('📧 Session data:', JSON.stringify(req.session));
+  console.log('📧 Is authenticated:', !!req.session.isAuthenticated);
+  console.log('📧 Has tokens:', !!req.session.tokens);
+  
   if (!req.session.isAuthenticated || !req.session.tokens) {
+    console.log('❌ Authentication failed - redirecting to auth');
     return res.status(401).json({ error: 'Not authenticated' });
   }
   
