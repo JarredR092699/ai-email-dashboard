@@ -1,0 +1,14 @@
+[phases.install]
+dependsOn = []
+cmds = [
+  "npm install",
+  "cd backend && npm install", 
+  "cd email-dashboard && npm install"
+]
+
+[phases.build]  
+dependsOn = ["install"]
+cmds = ["cd email-dashboard && npm run build"]
+
+[start]
+cmd = "cd backend && npm start"

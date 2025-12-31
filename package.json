@@ -6,10 +6,11 @@
     "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
     "dev:backend": "cd backend && npm run dev",
     "dev:frontend": "cd email-dashboard && npm run dev",
-    "build": "cd email-dashboard && npm run build",
+    "build": "npm run install:all && cd email-dashboard && npm run build",
     "start": "cd backend && npm start",
-    "install:all": "npm install && cd backend && npm install && cd ../email-dashboard && npm install",
-    "deploy": "npm run build && npm run start"
+    "install:all": "cd backend && npm install && cd ../email-dashboard && npm install",
+    "deploy": "npm run build && npm run start",
+    "postinstall": "npm run install:all"
   },
   "keywords": ["email", "ai", "dashboard", "prioritization", "claude", "gmail"],
   "author": "Jarred Robidoux",
