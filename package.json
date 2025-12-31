@@ -1,0 +1,20 @@
+{
+  "name": "ai-email-dashboard",
+  "version": "1.0.0",
+  "description": "AI-powered email prioritization dashboard for executives",
+  "scripts": {
+    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "dev:backend": "cd backend && npm run dev",
+    "dev:frontend": "cd email-dashboard && npm run dev",
+    "build": "cd email-dashboard && npm run build",
+    "start": "cd backend && npm start",
+    "install:all": "npm install && cd backend && npm install && cd ../email-dashboard && npm install",
+    "deploy": "npm run build && npm run start"
+  },
+  "keywords": ["email", "ai", "dashboard", "prioritization", "claude", "gmail"],
+  "author": "Jarred Robidoux",
+  "license": "MIT",
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}
