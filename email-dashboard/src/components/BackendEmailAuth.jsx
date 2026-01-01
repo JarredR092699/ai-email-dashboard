@@ -7,36 +7,35 @@ const BackendEmailAuth = ({ onAuthChange }) => {
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    checkAuthStatus();
-    
-    // Listen for auth callback from popup
-    const handleMessage = (event) => {
-      console.log('📧 Received message from popup:', event.origin, event.data);
+    // Check for OAuth completion on page load
+    const checkOAuthReturn = () => {
+      const urlParams = new URLSearchParams(window.location.search);
+      const error = urlParams.get('error');
       
-      // Allow messages from same origin (production fix)
-      if (event.origin !== window.location.origin) {
-        console.log('❌ Origin mismatch:', event.origin, 'vs', window.location.origin);
+      if (error) {
+        setError(`Authentication failed: ${error}`);
+        setIsAuthenticated(false);
+        onAuthChange(false);
+        // Clean up URL
+        window.history.replaceState({}, '', window.location.pathname);
         return;
       }
       
-      if (event.data.type === 'GMAIL_AUTH_SUCCESS') {
-        console.log('✅ Gmail auth success, token:', event.data.authToken);
-        if (event.data.authToken) {
-          localStorage.setItem('emailDashboardAuthToken', event.data.authToken);
-        }
+      // Check if we have an auth token (set by redirect callback)
+      const authToken = localStorage.getItem('emailDashboardAuthToken');
+      const oauthInProgress = localStorage.getItem('emailDashboardOAuthInProgress');
+      
+      if (authToken && !oauthInProgress) {
+        console.log('✅ Found auth token after OAuth redirect');
         setIsAuthenticated(true);
         onAuthChange(true);
         setError(null);
-      } else if (event.data.type === 'GMAIL_AUTH_ERROR') {
-        console.log('❌ Gmail auth error:', event.data.error);
-        setError(`Authentication failed: ${event.data.error}`);
-        setIsAuthenticated(false);
-        onAuthChange(false);
+        return;
       }
     };
-
-    window.addEventListener('message', handleMessage);
-    return () => window.removeEventListener('message', handleMessage);
+    
+    checkOAuthReturn();
+    checkAuthStatus();
   }, [onAuthChange]);
 
   const checkAuthStatus = async () => {
@@ -65,38 +64,11 @@ const BackendEmailAuth = ({ onAuthChange }) => {
       const { authUrl } = await apiService.getAuthUrl();
       console.log('📧 Got auth URL:', authUrl);
       
-      // Open popup for OAuth flow
-      const popup = window.open(
-        authUrl,
-        'gmail-auth',
-        'width=500,height=600,scrollbars=yes,resizable=yes'
-      );
-
-      console.log('📧 Popup opened:', !!popup);
+      // Store current state for redirect return
+      localStorage.setItem('emailDashboardOAuthInProgress', 'true');
       
-      if (!popup) {
-        throw new Error('Popup blocked or failed to open. Please enable popups for this site.');
-      }
-
-      // Monitor popup closure
-      const checkClosed = setInterval(() => {
-        if (popup.closed) {
-          console.log('📧 Popup closed');
-          clearInterval(checkClosed);
-          setIsLoading(false);
-          // Check auth status after popup closes
-          setTimeout(checkAuthStatus, 1000);
-        }
-      }, 1000);
-
-      // Cleanup timeout
-      setTimeout(() => {
-        clearInterval(checkClosed);
-        if (!popup.closed) {
-          popup.close();
-        }
-        setIsLoading(false);
-      }, 60000); // 1 minute timeout
+      // Direct redirect instead of popup (more reliable)
+      window.location.href = authUrl;
 
     } catch (err) {
       console.error('Sign in failed:', err);

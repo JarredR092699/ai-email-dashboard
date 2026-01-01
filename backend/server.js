@@ -57,98 +57,81 @@ const SCOPES = ['https://www.googleapis.com/auth/gmail.readonly'];
 app.get('/auth/callback', async (req, res) => {
   const { code, error } = req.query;
   
-  const callbackPage = `
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <title>Authentication</title>
-      <style>
-        body { 
-          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          height: 100vh;
-          margin: 0;
-          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-          color: white;
-          text-align: center;
-        }
-        .spinner {
-          width: 40px;
-          height: 40px;
-          border: 4px solid rgba(255,255,255,0.3);
-          border-top: 4px solid white;
-          border-radius: 50%;
-          animation: spin 1s linear infinite;
-          margin: 20px auto;
-        }
-        @keyframes spin {
-          0% { transform: rotate(0deg); }
-          100% { transform: rotate(360deg); }
-        }
-      </style>
-    </head>
-    <body>
-      <div>
-        <div class="spinner"></div>
-        <h2>Completing authentication...</h2>
-        <p>This window will close automatically.</p>
-      </div>
-      <script>
-        const code = '${code}';
-        const error = '${error}';
-        
-        // Determine the correct origin dynamically
-        const targetOrigin = window.opener ? window.opener.location.origin : window.location.origin;
-        
-        if (code) {
-          // Send code to backend
-          fetch('/api/auth/callback', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            credentials: 'include',
-            body: JSON.stringify({ code })
-          })
-          .then(response => response.json())
-          .then(data => {
-            if (data.success) {
-              // Store auth token in localStorage
-              if (data.authToken) {
-                window.opener.localStorage.setItem('emailDashboardAuthToken', data.authToken);
-              }
-              window.opener.postMessage({ 
-                type: 'GMAIL_AUTH_SUCCESS',
-                authToken: data.authToken
-              }, targetOrigin);
-            } else {
-              window.opener.postMessage({ 
-                type: 'GMAIL_AUTH_ERROR', 
-                error: data.error || 'Authentication failed' 
-              }, targetOrigin);
-            }
-            window.close();
-          })
-          .catch(err => {
-            window.opener.postMessage({ 
-              type: 'GMAIL_AUTH_ERROR', 
-              error: err.message 
-            }, targetOrigin);
-            window.close();
-          });
-        } else if (error) {
-          window.opener.postMessage({ 
-            type: 'GMAIL_AUTH_ERROR', 
-            error: error 
-          }, targetOrigin);
-          window.close();
-        }
-      </script>
-    </body>
-    </html>
-  `;
+  console.log('📧 OAuth callback - Code:', code ? 'YES' : 'NO', 'Error:', error || 'NONE');
   
-  res.send(callbackPage);
+  if (error) {
+    return res.redirect(`/?error=${encodeURIComponent(error)}`);
+  }
+  
+  if (!code) {
+    return res.redirect(`/?error=${encodeURIComponent('No authorization code received')}`);
+  }
+  
+  try {
+    const { tokens } = await oauth2Client.getToken(code);
+    oauth2Client.setCredentials(tokens);
+    
+    // Generate a temporary auth token
+    const authToken = `auth_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    
+    // Store tokens with temporary auth token
+    tokenStore.set(authToken, {
+      tokens,
+      timestamp: Date.now()
+    });
+    
+    console.log('✅ OAuth successful, tokens stored with auth token:', authToken);
+    
+    // Redirect back to main app with success
+    const redirectPage = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Authentication Successful</title>
+        <style>
+          body { 
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            text-align: center;
+          }
+          .success {
+            background: rgba(255,255,255,0.1);
+            padding: 40px;
+            border-radius: 10px;
+            max-width: 400px;
+          }
+        </style>
+      </head>
+      <body>
+        <div class="success">
+          <h2>✅ Authentication Successful!</h2>
+          <p>Redirecting you back to the dashboard...</p>
+        </div>
+        <script>
+          // Store auth token
+          localStorage.setItem('emailDashboardAuthToken', '${authToken}');
+          localStorage.removeItem('emailDashboardOAuthInProgress');
+          
+          // Redirect back to main app
+          setTimeout(() => {
+            window.location.href = '/';
+          }, 2000);
+        </script>
+      </body>
+      </html>
+    `;
+    
+    res.send(redirectPage);
+  } catch (authError) {
+    console.error('❌ OAuth callback error:', authError);
+    res.redirect(`/?error=${encodeURIComponent('Authentication failed: ' + authError.message)}`);
+  }
 });
 
 // Health check
