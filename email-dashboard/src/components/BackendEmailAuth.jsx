@@ -11,13 +11,24 @@ const BackendEmailAuth = ({ onAuthChange }) => {
     
     // Listen for auth callback from popup
     const handleMessage = (event) => {
-      if (event.origin !== window.location.origin) return;
+      console.log('📧 Received message from popup:', event.origin, event.data);
+      
+      // Allow messages from same origin (production fix)
+      if (event.origin !== window.location.origin) {
+        console.log('❌ Origin mismatch:', event.origin, 'vs', window.location.origin);
+        return;
+      }
       
       if (event.data.type === 'GMAIL_AUTH_SUCCESS') {
+        console.log('✅ Gmail auth success, token:', event.data.authToken);
+        if (event.data.authToken) {
+          localStorage.setItem('emailDashboardAuthToken', event.data.authToken);
+        }
         setIsAuthenticated(true);
         onAuthChange(true);
         setError(null);
       } else if (event.data.type === 'GMAIL_AUTH_ERROR') {
+        console.log('❌ Gmail auth error:', event.data.error);
         setError(`Authentication failed: ${event.data.error}`);
         setIsAuthenticated(false);
         onAuthChange(false);
@@ -48,8 +59,11 @@ const BackendEmailAuth = ({ onAuthChange }) => {
       setIsLoading(true);
       setError(null);
       
+      console.log('📧 Starting sign in process...');
+      
       // Get auth URL from backend
       const { authUrl } = await apiService.getAuthUrl();
+      console.log('📧 Got auth URL:', authUrl);
       
       // Open popup for OAuth flow
       const popup = window.open(
@@ -58,9 +72,16 @@ const BackendEmailAuth = ({ onAuthChange }) => {
         'width=500,height=600,scrollbars=yes,resizable=yes'
       );
 
+      console.log('📧 Popup opened:', !!popup);
+      
+      if (!popup) {
+        throw new Error('Popup blocked or failed to open. Please enable popups for this site.');
+      }
+
       // Monitor popup closure
       const checkClosed = setInterval(() => {
         if (popup.closed) {
+          console.log('📧 Popup closed');
           clearInterval(checkClosed);
           setIsLoading(false);
           // Check auth status after popup closes
